@@ -1,0 +1,1 @@
+Various solutions for https://rosettacode.org/
