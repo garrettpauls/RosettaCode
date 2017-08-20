@@ -53,21 +53,34 @@ addTile game@Game{gameTiles=tiles, randomGen=g} = game'
           ([r, c], g') = pickRandom openTiles g
           tiles' = setElem 2 (r, c) tiles
 
-data Direction = DLeft | DRight | DUp | DDown
-shiftTiles :: Direction -> GameData -> Maybe GameData
-shiftTiles _ g@Won{}  = Just g
-shiftTiles _ g@Lost{} = Just g
-shiftTiles d g@Game{gameTiles=tiles} = g'
-  where
-    tiles' = case d of
-      DLeft  -> shiftLeft tiles
-      DRight -> shiftRight tiles
-      DUp    -> shiftUp tiles
-      DDown  -> shiftDown tiles
+winValue :: Int
+winValue = 2048
 
-    g' = if tiles /= tiles'
-      then Just g{gameTiles=tiles'}
-      else Nothing
+checkWin :: GameData -> GameData
+checkWin game@Won{}  = game
+checkWin game@Lost{} = game
+checkWin game@Game{gameTiles=tiles} =
+  if winValue `elem` toList tiles
+    then Won $ randomGen game
+    else game
+
+data GameAction = ShiftLeft | ShiftRight | ShiftUp | ShiftDown | Quit
+
+iterateGame :: GameAction -> GameData -> Maybe GameData
+iterateGame _      g@Won{}  = Just g
+iterateGame _      g@Lost{} = Just g
+iterateGame Quit   g        = Just $ Lost $ randomGen g
+iterateGame action g@Game{gameTiles=tiles} = game'
+  where 
+    shiftedTiles = case action of
+      ShiftLeft  -> shiftLeft tiles
+      ShiftRight -> shiftRight tiles
+      ShiftUp    -> shiftUp tiles
+      ShiftDown  -> shiftDown tiles
+
+    game' = if shiftedTiles == tiles
+      then Nothing
+      else Just $ checkWin $ addTile g{gameTiles=shiftedTiles}
 
 shiftRowLeft :: [Int] -> [Int]
 shiftRowLeft = shiftZero . shiftRow . shiftZero
@@ -132,17 +145,17 @@ textLoop g@Game{} = do
     getChLoop g = do
       ch <- getChar
       case lookup ch actions of
-        Just action -> case action g of
+        Just action -> case iterateGame action g of
           Just g' -> return g'
           Nothing -> getChLoop g
         Nothing     -> getChLoop g
-    actions :: [(Char, GameData -> Maybe GameData)]
+    actions :: [(Char, GameAction)]
     actions =
-      [ ('q', Just . Lost . randomGen)
-      , ('w', shiftTiles DUp)
-      , ('a', shiftTiles DLeft)
-      , ('s', shiftTiles DDown)
-      , ('d', shiftTiles DRight)
+      [ ('q', Quit)
+      , ('w', ShiftUp)
+      , ('a', ShiftLeft)
+      , ('s', ShiftDown)
+      , ('d', ShiftRight)
       ]
 
 main :: IO ()
