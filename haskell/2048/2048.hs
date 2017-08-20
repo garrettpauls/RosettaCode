@@ -1,10 +1,11 @@
 -- https://rosettacode.org/wiki/2048
--- stack runghc --resolver lts-9.0 --install-ghc --package matrix --package random -- 2048.hs
+-- stack runghc --resolver lts-9.0 --install-ghc --package matrix --package random --package ansi-terminal -- 2048.hs
 module Main(main) where
 
 import           Control.Monad             (liftM, replicateM)
 import           Control.Monad.Trans.State (runState, state)
 import           Data.Matrix
+import           System.Console.ANSI       (clearScreen, setCursorPosition)
 import           System.Random
 
 type GameTile = Int
@@ -71,7 +72,7 @@ iterateGame _      g@Won{}  = Just g
 iterateGame _      g@Lost{} = Just g
 iterateGame Quit   g        = Just $ Lost $ randomGen g
 iterateGame action g@Game{gameTiles=tiles} = game'
-  where 
+  where
     shiftedTiles = case action of
       ShiftLeft  -> shiftLeft tiles
       ShiftRight -> shiftRight tiles
@@ -138,6 +139,8 @@ textLoop g@Lost{} = do
   print g
   return g
 textLoop g@Game{} = do
+  setCursorPosition 0 0
+  clearScreen
   print g
   getChLoop g >>= return . addTile >>= textLoop
   where
