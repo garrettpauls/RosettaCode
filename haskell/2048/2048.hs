@@ -1,11 +1,10 @@
 -- https://rosettacode.org/wiki/2048
--- stack runghc --resolver lts-9.0 --install-ghc --package matrix --package random --package ansi-terminal -- 2048.hs
+-- stack runghc --resolver lts-9.0 --install-ghc --package matrix --package random --package gloss -- 2048.hs
 module Main(main) where
 
-import           Control.Monad             (liftM, replicateM)
-import           Control.Monad.Trans.State (runState, state)
 import           Data.Matrix
-import           System.Console.ANSI       (clearScreen, setCursorPosition)
+import           Graphics.Gloss
+import           Graphics.Gloss.Interface.IO.Game
 import           System.Random
 
 -- Game State
@@ -123,38 +122,62 @@ replace xs idx value = before ++ [value] ++ after'
     after' = tail after
 
 -- User Interface
-textLoop :: GameData -> IO GameData
-textLoop g@Won{} = do
-  print g
-  return g
-textLoop g@Lost{} = do
-  print g
-  return g
-textLoop g@Game{} = do
-  setCursorPosition 0 0
-  clearScreen
-  print g
-  getChLoop g >>= return . addTile >>= textLoop
+-- textLoop :: GameData -> IO GameData
+-- textLoop g@Won{} = do
+--   print g
+--   return g
+-- textLoop g@Lost{} = do
+--   print g
+--   return g
+-- textLoop g@Game{} = do
+--   setCursorPosition 0 0
+--   clearScreen
+--   print g
+--   getChLoop g >>= return . addTile >>= textLoop
+--   where
+--     getChLoop :: GameData -> IO GameData
+--     getChLoop g = do
+--       ch <- getChar
+--       case lookup ch actions of
+--         Just action -> case iterateGame action g of
+--           Just g' -> return g'
+--           Nothing -> getChLoop g
+--         Nothing     -> getChLoop g
+--     actions :: [(Char, GameAction)]
+--     actions =
+--       [ ('q', Quit)
+--       , ('w', ShiftUp)
+--       , ('a', ShiftLeft)
+--       , ('s', ShiftDown)
+--       , ('d', ShiftRight)
+--       ]
+data GameWorld = GameWorld
+  { worldGame :: GameData
+  , worldSize :: (Int, Int)
+  }
+
+runUI :: GameData -> IO ()
+runUI game = play display background fps world render processInput stepWorld
   where
-    getChLoop :: GameData -> IO GameData
-    getChLoop g = do
-      ch <- getChar
-      case lookup ch actions of
-        Just action -> case iterateGame action g of
-          Just g' -> return g'
-          Nothing -> getChLoop g
-        Nothing     -> getChLoop g
-    actions :: [(Char, GameAction)]
-    actions =
-      [ ('q', Quit)
-      , ('w', ShiftUp)
-      , ('a', ShiftLeft)
-      , ('s', ShiftDown)
-      , ('d', ShiftRight)
-      ]
+    display = InWindow "2048" size (10, 10)
+    background = black
+    fps = 60
+    size = (400, 400)
+    world = GameWorld game size
+
+render :: GameWorld -> Picture
+render world = blank
+
+processInput :: Event -> GameWorld -> GameWorld
+processInput (EventResize newSize) world = world{worldSize=newSize}
+processInput (EventMotion _) world = world
+processInput (EventKey key state modifiers _) world = world
+
+stepWorld :: Float -> GameWorld -> GameWorld
+stepWorld _ = id
 
 main :: IO ()
 main = do
   randomGen <- getStdGen
-  textLoop $ newGame (4, 4) randomGen
+  runUI $ newGame (4, 4) randomGen
   return ()
