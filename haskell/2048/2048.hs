@@ -47,23 +47,25 @@ iterateGame action g@Game{gameTiles=tiles} = game'
       then Nothing
       else Just $ checkWin $ addTile g{gameTiles=shiftedTiles}
 
+matrixCells :: Matrix a -> [(Int, Int, a)]
+matrixCells m = map (\[r, c] -> (r, c, m ! (r, c))) $ sequence [[1..nrows m], [1..ncols m]]
+
 addTile :: GameData -> GameData
 addTile game@Won{}  = game
 addTile game@Lost{} = game
 addTile game@Game{gameTiles=tiles, randomGen=g} = game'
   where
-    allTiles = sequence [[1..nrows tiles], [1..ncols tiles]]
-    openTiles = filter isOpen allTiles
+    openTiles = filter isOpen $ matrixCells tiles
 
-    isOpen :: [Int] -> Bool
-    isOpen [r, c] = tiles ! (r, c) == 0
+    isOpen :: (Int, Int, GameTile) -> Bool
+    isOpen (r, c, v) = v == 0
 
     game' =
       if null openTiles
       then Lost g
       else game{gameTiles=tiles', randomGen=g''}
         where
-          ([r, c], g') = pickRandom openTiles g
+          ((r, c, _), g') = pickRandom openTiles g
           (newTile, g'') = pickRandom newTileOptions g'
           tiles' = setElem 2 (r, c) tiles
 
@@ -123,35 +125,6 @@ replace xs idx value = before ++ [value] ++ after'
     after' = tail after
 
 -- User Interface
--- textLoop :: GameData -> IO GameData
--- textLoop g@Won{} = do
---   print g
---   return g
--- textLoop g@Lost{} = do
---   print g
---   return g
--- textLoop g@Game{} = do
---   setCursorPosition 0 0
---   clearScreen
---   print g
---   getChLoop g >>= return . addTile >>= textLoop
---   where
---     getChLoop :: GameData -> IO GameData
---     getChLoop g = do
---       ch <- getChar
---       case lookup ch actions of
---         Just action -> case iterateGame action g of
---           Just g' -> return g'
---           Nothing -> getChLoop g
---         Nothing     -> getChLoop g
---     actions :: [(Char, GameAction)]
---     actions =
---       [ ('q', Quit)
---       , ('w', ShiftUp)
---       , ('a', ShiftLeft)
---       , ('s', ShiftDown)
---       , ('d', ShiftRight)
---       ]
 data GameWorld = GameWorld
   { worldGame :: GameData
   , worldSize :: (Int, Int)
@@ -166,13 +139,10 @@ runUI game = play display background fps world render processInput stepWorld
     size = (400, 400)
     world = GameWorld game size
 
-render :: GameWorld -> Picture
-render world = blank
-
 processInput :: Event -> GameWorld -> GameWorld
 processInput (EventResize newSize) world = world{worldSize=newSize}
 processInput (EventMotion _) world = world
-processInput (EventKey key state modifiers _) world
+processInput (EventKey key Up modifiers _) world
   | key == SpecialKey KeyLeft  = iterateWorld world ShiftLeft
   | key == SpecialKey KeyRight = iterateWorld world ShiftRight
   | key == SpecialKey KeyUp    = iterateWorld world ShiftUp
@@ -182,12 +152,65 @@ processInput (EventKey key state modifiers _) world
     iterateWorld :: GameWorld -> GameAction -> GameWorld
     iterateWorld world@GameWorld{worldGame=game} action = world{worldGame=game'}
       where game' = fromMaybe game $ iterateGame action game
+processInput _ world = world
 
 stepWorld :: Float -> GameWorld -> GameWorld
 stepWorld _ = id
+
+render :: GameWorld -> Picture
+render (GameWorld Lost{} size) = color white $ scaledText size "You lost"
+render (GameWorld Won{}  size) = color white $ scaledText size "You won"
+render (GameWorld game (width, height)) = pictures boxes
+  where
+    tiles = gameTiles game
+    padding = 4
+    boxW = width `div` nrows tiles - (padding * 2)
+    boxH = height `div` ncols tiles - (padding * 2)
+
+    boxes = map (renderTile . fixRC) $ matrixCells tiles
+
+    fixRC :: (Int, Int, GameTile) -> (Int, Int, GameTile)
+    fixRC (r, c, tile) = (nrows tiles - r + 1, c, tile)
+
+    renderTile :: (Int, Int, GameTile) -> Picture
+    renderTile (r, c, tile) = offsetTile r c pic
+      where
+        pic = pictures [background, border, number]
+        background = backgroundColor tile $ rectangleSolid (fromIntegral boxW) (fromIntegral boxH)
+        border = color white $ rectangleWire (fromIntegral boxW) (fromIntegral boxH)
+        number = color white $ scaledText (width, height) $ show tile
+
+    offsetTile :: Int -> Int -> Picture -> Picture
+    offsetTile r c = translate offsetX offsetY
+      where
+        offsetX = fromIntegral $ zeroX + ((c - 1) * (boxW + padding))
+        offsetY = fromIntegral $ zeroY + ((r - 1) * (boxH + padding))
+
+        zeroX = boxW `div` 2 - width  `div` 2 + padding * 2
+        zeroY = boxH `div` 2 - height `div` 2 + padding * 2
+
+backgroundColor :: GameTile -> Picture -> Picture
+backgroundColor tile = color (bgColor tile)
+  where
+    bgColor :: GameTile -> Color
+    bgColor tile
+      | tile == 0 = light $ light blue
+      | tile < 32 = light blue
+      | tile < 64 = blue
+      | tile < 128 = dark blue
+      | otherwise = orange
+
+scaledText :: (Int, Int) -> String -> Picture
+scaledText (width, height) t = pic
+  where
+    pic = scale scaleX scaleY $ text t
+
+    scaleX = fromIntegral width / 2000
+    scaleY = fromIntegral height / 2000
 
 main :: IO ()
 main = do
   randomGen <- getStdGen
   runUI $ newGame (4, 4) randomGen
+  --runUI $ Game (fromList 4 4 [1..16]) 2048 randomGen
   return ()
