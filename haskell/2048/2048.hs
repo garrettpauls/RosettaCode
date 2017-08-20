@@ -178,7 +178,9 @@ render (GameWorld game (width, height)) = pictures boxes
         pic = pictures [background, border, number]
         background = backgroundColor tile $ rectangleSolid (fromIntegral boxW) (fromIntegral boxH)
         border = color white $ rectangleWire (fromIntegral boxW) (fromIntegral boxH)
-        number = color white $ scaledText (width, height) $ show tile
+        number = if tile == 0
+          then blank
+          else color black $ scaledText (width, height) $ show tile
 
     offsetTile :: Int -> Int -> Picture -> Picture
     offsetTile r c = translate offsetX offsetY
@@ -193,12 +195,15 @@ backgroundColor :: GameTile -> Picture -> Picture
 backgroundColor tile = color (bgColor tile)
   where
     bgColor :: GameTile -> Color
-    bgColor tile
-      | tile == 0 = light $ light blue
-      | tile < 32 = light blue
-      | tile < 64 = blue
-      | tile < 128 = dark blue
-      | otherwise = orange
+    bgColor 0 = makeColor 1 (174/255) 0.5 1
+    bgColor x = makeColor (r/255) (g/255) (b/255) 1
+      where
+        r = 255
+        g = 174 + percent * (005 - 174) -- ^ low=174, high=005
+        b = 127
+
+        percent =  log2 (fromIntegral tile) / 11 -- ^ log2 2048 = 11
+        log2 = logBase 2
 
 scaledText :: (Int, Int) -> String -> Picture
 scaledText (width, height) t = pic
