@@ -8,9 +8,11 @@ import           Data.Matrix
 import           System.Console.ANSI       (clearScreen, setCursorPosition)
 import           System.Random
 
+-- Game State
 type GameTile = Int
 data GameData = Game
   { gameTiles :: Matrix GameTile
+  , winValue  :: Int
   , randomGen :: StdGen
   }
   | Won  { randomGen :: StdGen }
@@ -20,20 +22,30 @@ instance Show GameData where
   show Lost{}      = "You lost"
   show game@Game{} = prettyMatrix $ gameTiles game
 
--- | Splits a list into chunks of a size.
-chunk :: Int -> [a] -> [[a]]
-cunnk _ [] = []
-chunk size xs
-  | size >= length xs = [xs]
-  | otherwise = cur:chunk size rest
-    where
-      (cur, rest) = splitAt size xs
-
 newGame :: (Int, Int) -> StdGen -> GameData
 newGame (r, c) randGen = addTile $ addTile game
   where
-    game = Game tiles randGen
+    game = Game tiles 2048 randGen
     tiles = zero r c
+
+-- Game Logic
+data GameAction = ShiftLeft | ShiftRight | ShiftUp | ShiftDown | Quit
+
+iterateGame :: GameAction -> GameData -> Maybe GameData
+iterateGame _      g@Won{}  = Just g
+iterateGame _      g@Lost{} = Just g
+iterateGame Quit   g        = Just $ Lost $ randomGen g
+iterateGame action g@Game{gameTiles=tiles} = game'
+  where
+    shiftedTiles = case action of
+      ShiftLeft  -> shiftLeft  tiles
+      ShiftRight -> shiftRight tiles
+      ShiftUp    -> shiftUp    tiles
+      ShiftDown  -> shiftDown  tiles
+
+    game' = if shiftedTiles == tiles
+      then Nothing
+      else Just $ checkWin $ addTile g{gameTiles=shiftedTiles}
 
 addTile :: GameData -> GameData
 addTile game@Won{}  = game
@@ -49,39 +61,22 @@ addTile game@Game{gameTiles=tiles, randomGen=g} = game'
     game' =
       if null openTiles
       then Lost g
-      else game{gameTiles=tiles'}
+      else game{gameTiles=tiles', randomGen=g''}
         where
           ([r, c], g') = pickRandom openTiles g
+          (newTile, g'') = pickRandom newTileOptions g'
           tiles' = setElem 2 (r, c) tiles
 
-winValue :: Int
-winValue = 2048
+          -- 10% chance of adding a 4
+          newTileOptions = 4:replicate 9 2
 
 checkWin :: GameData -> GameData
 checkWin game@Won{}  = game
 checkWin game@Lost{} = game
 checkWin game@Game{gameTiles=tiles} =
-  if winValue `elem` toList tiles
+  if winValue game `elem` toList tiles
     then Won $ randomGen game
     else game
-
-data GameAction = ShiftLeft | ShiftRight | ShiftUp | ShiftDown | Quit
-
-iterateGame :: GameAction -> GameData -> Maybe GameData
-iterateGame _      g@Won{}  = Just g
-iterateGame _      g@Lost{} = Just g
-iterateGame Quit   g        = Just $ Lost $ randomGen g
-iterateGame action g@Game{gameTiles=tiles} = game'
-  where
-    shiftedTiles = case action of
-      ShiftLeft  -> shiftLeft tiles
-      ShiftRight -> shiftRight tiles
-      ShiftUp    -> shiftUp tiles
-      ShiftDown  -> shiftDown tiles
-
-    game' = if shiftedTiles == tiles
-      then Nothing
-      else Just $ checkWin $ addTile g{gameTiles=shiftedTiles}
 
 shiftRowLeft :: [Int] -> [Int]
 shiftRowLeft = shiftZero . shiftRow . shiftZero
@@ -113,11 +108,7 @@ shiftUp = transpose . shiftLeft . transpose
 shiftDown :: Matrix Int -> Matrix Int
 shiftDown = transpose . shiftRight . transpose
 
-
--- Utility functions
-randomRn :: Random a => (a, a) -> Int -> StdGen -> ([a], StdGen)
-randomRn lh n = runState (replicateM n (state $ randomR lh))
-
+-- Utility Functions
 -- | Picks a random element of the list.
 pickRandom :: [a] -> StdGen -> (a, StdGen)
 pickRandom xs g =
@@ -131,6 +122,7 @@ replace xs idx value = before ++ [value] ++ after'
     (before, after) = splitAt idx xs
     after' = tail after
 
+-- User Interface
 textLoop :: GameData -> IO GameData
 textLoop g@Won{} = do
   print g
