@@ -3,6 +3,7 @@
 module Main(main) where
 
 import           Data.Matrix
+import           Data.Maybe                       (fromMaybe)
 import           Graphics.Gloss
 import           Graphics.Gloss.Interface.IO.Game
 import           System.Random
@@ -171,7 +172,16 @@ render world = blank
 processInput :: Event -> GameWorld -> GameWorld
 processInput (EventResize newSize) world = world{worldSize=newSize}
 processInput (EventMotion _) world = world
-processInput (EventKey key state modifiers _) world = world
+processInput (EventKey key state modifiers _) world
+  | key == SpecialKey KeyLeft  = iterateWorld world ShiftLeft
+  | key == SpecialKey KeyRight = iterateWorld world ShiftRight
+  | key == SpecialKey KeyUp    = iterateWorld world ShiftUp
+  | key == SpecialKey KeyDown  = iterateWorld world ShiftDown
+  | otherwise = world
+  where
+    iterateWorld :: GameWorld -> GameAction -> GameWorld
+    iterateWorld world@GameWorld{worldGame=game} action = world{worldGame=game'}
+      where game' = fromMaybe game $ iterateGame action game
 
 stepWorld :: Float -> GameWorld -> GameWorld
 stepWorld _ = id
